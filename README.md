@@ -1,59 +1,38 @@
-# URL Shortener Starter
+# create-svelte
 
-This is an Encore starter for a URL Shortener. It has two API endpoints and a PostgreSQL database to store the URL IDs and retrieve the full URL given an ID.
+Everything you need to build a Svelte project, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/main/packages/create-svelte).
 
-## Build from scratch with a tutorial
+## Creating a project
 
-If you prefer to built it yourself, check out the [tutorial](https://encore.dev/docs/tutorials/rest-api) to learn how to build this application from scratch.
-
-## Developing locally
-
-When you have [installed Encore](https://encore.dev/docs/install), you can create a new Encore application and clone this example with this command.
+If you're seeing this, you've probably already done this step. Congrats!
 
 ```bash
-encore app create my-app-name --example=url-shortener
+# create a new project in the current directory
+npm create svelte@latest
+
+# create a new project in my-app
+npm create svelte@latest my-app
 ```
 
-## Running locally
+## Developing
 
-Before running your application, make sure you have Docker installed and running. It's required to locally run Encore applications with databases.
+Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
 
 ```bash
-encore run
+npm run dev
+
+# or start the server and open the app in a new browser tab
+npm run dev -- --open
 ```
 
-## Open the developer dashboard
+## Building
 
-While `encore run` is running, open [http://localhost:9400/](http://localhost:9400/) to access Encore's [local developer dashboard](https://encore.dev/docs/observability/dev-dash).
-
-Here you can see API docs, make requests in the API explorer, and view traces of the responses.
-
-## Using the API
-
-To see that your app is running, you can ping the API to shorten a url.
+To create a production version of your app:
 
 ```bash
-curl 'http://localhost:4000/url' -d '{"URL":"https://news.ycombinator.com"}'
+npm run build
 ```
 
-## Deployment
+You can preview the production build with `npm run preview`.
 
-Deploy your application to a staging environment in Encore's free development cloud:
-
-```bash
-git add -A .
-git commit -m 'Commit message'
-git push encore
-```
-
-Then head over to the [Cloud Dashboard](https://app.encore.dev) to monitor your deployment and find your production URL.
-
-From there you can also connect your own AWS or GCP account to use for deployment.
-
-Now off you go into the clouds!
-
-## Testing
-
-```bash
-encore test ./...
-```
+> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
