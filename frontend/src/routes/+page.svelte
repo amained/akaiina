@@ -1,2 +1,10 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
+<script>
+    import { input } from '$lib/input.ts';
+    import Idea from '$lib/idea.svelte';
+</script>
+
+<Idea
+    title={input[0].title}
+    desc={input[0].desc}
+    children={input[0].children}
+/>

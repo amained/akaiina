@@ -1,0 +1,19 @@
+.idea > div:first-child {
+	background-color: teal;
+	color: white;
+	padding: 5px;
+	min-width: 150px;
+	max-height: 150px;
+	align-self: center;
+}
+
+.idea > div:nth-child(2) {
+	display: flex;
+	flex-direction: column;
+}
+
+.idea {
+	display: flex;
+	gap: 15px;
+	margin: 10px 0px;
+}
