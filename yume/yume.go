@@ -2,13 +2,11 @@ package yume
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"log"
 
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
+	"encore.dev/types/uuid"
 	"github.com/pinecone-io/go-pinecone/pinecone"
 )
 
@@ -47,14 +45,14 @@ type Document struct {
 // Namespace /yume/userns
 // currently only in atari serverless pod [dimension: 768, metric: cosine, spec: aws us-east-1]
 type UserNamespace struct {
-	ID    string
+	ID    uuid.UUID
 	NAME  string
-	OWNER string
+	OWNER uuid.UUID
 }
 
 type NewUserNamespaceParams struct {
 	NAME  string // what
-	OWNER string // the fuck
+	OWNER uuid.UUID
 }
 
 // TODO: generate embedding and manage the pineconedb from typescript backend
@@ -62,13 +60,12 @@ type NewUserNamespaceParams struct {
 //encore:api public path=/yume/userns/new
 func NewUserNamespace(ctx context.Context, p *NewUserNamespaceParams) (*UserNamespace, error) {
 	// add to db
-	id, err := generateID()
-	log.Println("we tf")
+	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, err
 	}
-	db.Exec(ctx, `INSERT INTO namespace (id, name) VALUES ($1, $2)`, id, p.NAME)
-	return &UserNamespace{ID: id, NAME: p.NAME}, nil
+	db.Exec(ctx, `INSERT INTO namespace (id, name, owner) VALUES ($1, $2, $3)`, id, p.NAME, p.OWNER.String())
+	return &UserNamespace{ID: id, NAME: p.NAME, OWNER: p.OWNER}, nil
 }
 
 type QueryUserNamespaceParams struct {
@@ -92,15 +89,6 @@ func getUserNS(ctx context.Context, id string) error {
 func InsertToUserNamespace(ctx context.Context, id string, p *QueryUserNamespaceParams) error {
 	err := getUserNS(ctx, id)
 	return err
-}
-
-// generateID generates a random short ID.
-func generateID() (string, error) {
-	var data [6]byte // 6 bytes of entropy
-	if _, err := rand.Read(data[:]); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(data[:]), nil
 }
 
 // Define a database named 'url', using the database
