@@ -10,12 +10,7 @@ import (
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 	"encore.dev/types/uuid"
-	"github.com/pinecone-io/go-pinecone/pinecone"
 )
-
-var secrets struct {
-	pineconeKey string
-}
 
 type YumeConfig struct {
 	Prod            bool
@@ -23,24 +18,6 @@ type YumeConfig struct {
 }
 
 var yumeconf = config.Load[*YumeConfig]()
-
-//encore:service
-type Service struct {
-	pineconeClient  *pinecone.Client
-	indexConnection *pinecone.IndexConnection
-}
-
-func initService() (*Service, error) {
-	pc, err := pinecone.NewClient(pinecone.NewClientParams{ApiKey: secrets.pineconeKey})
-	if err != nil {
-		return nil, err
-	}
-	indx, err := pc.Index("https://multilingual-e5-large-qnilgk5.svc.aped-4627-b74a.pinecone.io")
-	if err != nil {
-		return nil, err
-	}
-	return &Service{pineconeClient: pc, indexConnection: indx}, nil
-}
 
 // User /yume/user
 // user management, TODO: connect to auth0 or something
