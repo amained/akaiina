@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"encore.dev/beta/errs"
+	"encore.dev/config"
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 	"encore.dev/types/uuid"
@@ -15,6 +16,13 @@ import (
 var secrets struct {
 	pineconeKey string
 }
+
+type YumeConfig struct {
+	Prod            bool
+	LogPotentialBug bool
+}
+
+var yumeconf = config.Load[*YumeConfig]()
 
 //encore:service
 type Service struct {
@@ -31,7 +39,6 @@ func initService() (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &Service{pineconeClient: pc, indexConnection: indx}, nil
 }
 
@@ -96,7 +103,9 @@ func IsBase64(s string) bool {
 //encore:api public path=/yume/documents/new
 func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 	if !IsBase64(p.CONTENT_BASE64) {
-		rlog.Error("content in NewDocument is not valid base64, frontend bug?")
+		if yumeconf.LogPotentialBug {
+			rlog.Error("content in NewDocument is not valid base64, frontend bug?")
+		}
 		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "content is not base64 encoded"}
 	}
 	id, err := uuid.NewV4()
