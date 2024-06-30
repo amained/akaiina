@@ -2,7 +2,6 @@
 	import { createMutation, useQueryClient } from '@tanstack/svelte-query';
 	import Client, { yume, Local } from '../client';
 	const encoreClient = new Client(Local);
-	const queryClient = useQueryClient();
 	let mutation = createMutation({
 		mutationFn: (params: yume.NewDocumentParams) => encoreClient.yume.NewDocument(params),
 		onSuccess: (data) => {
