@@ -17,8 +17,7 @@
 		name: string = '';
 </script>
 
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
+<h1>Test</h1>
 <input bind:value={userid} placeholder="user id" />
 <input bind:value={name} placeholder="document name" />
 <input bind:value={content} placeholder="content" />
