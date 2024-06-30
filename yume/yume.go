@@ -117,6 +117,15 @@ func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 	return &Document{ID: id, OWNER: p.OWNER, NAME: p.NAME}, nil
 }
 
+func getDocument(ctx context.Context, id string) error {
+	// check if exist
+	err := db.QueryRow(ctx, `SELECT (id) from document WHERE id = $1`, id).Scan(&id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Namespace /yume/userns
 // currently only in atari serverless pod [dimension: 768, metric: cosine, spec: aws us-east-1]
 type UserNamespace struct {
@@ -165,9 +174,19 @@ func getUserNS(ctx context.Context, id string) error {
 //encore:api public path=/yume/userns/insert/:id
 func InsertToUserNamespace(ctx context.Context, id string, p *QueryUserNamespaceParams) error {
 	err := getUserNS(ctx, id)
-	if err != nil && err.(*errs.Error).Code == errs.NotFound {
-		rlog.Error("invalid namespace id, frontend bug?", "id", id)
+	if err != nil {
+		if err.(*errs.Error).Code == errs.NotFound {
+			rlog.Error("invalid namespace id, frontend bug?", "id", id)
+		}
+		return err
 	}
+	// check if document exist
+	err = getDocument(ctx, p.DOCUMENTID.String())
+	if err != nil {
+		rlog.Error("document not found", "err", err)
+		return &errs.Error{Code: errs.NotFound, Message: "document not found"}
+	}
+	db.Exec(ctx, `INSERT INTO namespace_document (namespace_id, document_id) VALUES ($1, $2)`, id, p.DOCUMENTID.String())
 	return err
 }
 
