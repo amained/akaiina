@@ -10,3 +10,7 @@ if #Meta.Environment.Type == "ephemeral" {
     Prod: false
     LogPotentialBug: true
 }
+if #Meta.Environment.Type == "test" {
+    Prod: false
+    LogPotentialBug: true
+}
