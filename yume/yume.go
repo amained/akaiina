@@ -113,6 +113,12 @@ func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 		rlog.Error("uuid generation failed", "err", err)
 		return nil, err
 	}
+	if checkUser(ctx, p.OWNER) != nil {
+		if yumeconf.LogPotentialBug {
+			rlog.Error("user not found", "id", p.OWNER)
+		}
+		return nil, &errs.Error{Code: errs.NotFound, Message: "failed to find user with id"}
+	}
 	db.Exec(ctx, `INSERT INTO document (id, namespace_id, name, b64_content) VALUES ($1, $2, $3, $4)`, id, p.OWNER, p.NAME, p.CONTENT_BASE64)
 	return &Document{ID: id, OWNER: p.OWNER, NAME: p.NAME}, nil
 }
