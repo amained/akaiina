@@ -1,29 +1,67 @@
 <script lang="ts">
-	import { createMutation, useQueryClient } from '@tanstack/svelte-query';
+	import { createMutation } from '@tanstack/svelte-query';
+	import type { CreateMutationResult } from '@tanstack/svelte-query';
+	import type { PageData } from '$lib/types';
+	import { browser } from '$app/environment';
 	import Client, { yume, Local } from '../client';
-	const encoreClient = new Client(Local);
-	let mutation = createMutation({
-		mutationFn: (params: yume.NewDocumentParams) => encoreClient.yume.NewDocument(params),
-		onSuccess: (data) => {
-			console.log(data);
-		},
-		onError: (error) => {
-			console.error(error);
+	import LoginStatus from '../components/LoginStatus.svelte';
+	import { onMount } from 'svelte';
+
+	export let data: PageData;
+	let loaded = false;
+	let encoreClient: Client | null = null;
+	let loggedIn = false;
+	let mutation: null | CreateMutationResult<yume.Document, Error, yume.NewDocumentParams, unknown> =
+		null;
+	let userid: string = '';
+	let content: string = '';
+	let name: string = '';
+
+	onMount(() => {
+		// try {
+		if (data.page_server_data.auth_token !== null) {
+			encoreClient = new Client(Local, { auth: data.page_server_data.auth_token });
+			loggedIn = true;
 		}
-		// TODO: Invalidate shit
+		// }
+		// catch (e) {
+		// 	loggedIn = false;
+		// 	console.log('probably invalid token');
+		// 	encoreClient = new Client(Local, {});
+		// }
 	});
-	let userid: string,
-		content: string,
-		name: string = '';
+
+	$: mutation =
+		typeof loggedIn === 'boolean' && loggedIn
+			? createMutation({
+					mutationFn: (params: yume.NewDocumentParams) => encoreClient!.yume.NewDocument(params),
+					onSuccess: (data) => {
+						// TODO: Handle success, maybe update UI or show message
+					},
+					onError: (error) => {
+						console.error('Mutation error:', error);
+						// TODO: Handle error, show error message
+					}
+				})
+			: null;
+
+	function handleMutation() {
+		if ($mutation != null) {
+			$mutation.mutate({ OWNER: userid, NAME: name, CONTENT_BASE64: btoa(content) });
+		}
+	}
 </script>
 
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
-<input bind:value={userid} placeholder="user id" />
-<input bind:value={name} placeholder="document name" />
-<input bind:value={content} placeholder="content" />
+{#if mutation !== null && !mutation.loading}
+	<h1>Welcome to SvelteKit</h1>
+	<p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
+	<input bind:value={userid} placeholder="user id" />
+	<input bind:value={name} placeholder="document name" />
+	<input bind:value={content} placeholder="content" />
 
-<button
-	on:click={() => $mutation.mutate({ OWNER: userid, NAME: name, CONTENT_BASE64: btoa(content) })}
-	>test</button
->
+	<button on:click={handleMutation}>test</button>
+
+	<LoginStatus cookie={data.page_server_data} />
+{:else}
+	loading...
+{/if}

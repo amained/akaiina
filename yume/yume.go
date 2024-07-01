@@ -77,7 +77,7 @@ func IsBase64(s string) bool {
 	return err == nil
 }
 
-//encore:api public path=/yume/documents/new
+//encore:api auth path=/yume/documents/new
 func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 	if !IsBase64(p.CONTENT_BASE64) {
 		if yumeconf.LogPotentialBug {
