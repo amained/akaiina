@@ -1,13 +1,16 @@
 import getRequestClient from './getRequestClient';
+import type { Cookies } from '@sveltejs/kit';
+import type Client from '../client';
 
-import { browser } from '$app/environment';
-type RedirectURL = string;
-
+export type READONLY_COOKIE = { auth_token: string; state: string };
 /**
  * Handles the backend communication for the authentication flow.
  */
 export class Auth0Provider {
-	constructor(cookies, readonly_cookie) {
+	cookies: Cookies | null;
+	readonly_cookie: READONLY_COOKIE;
+	client: Client;
+	constructor(cookies: Cookies | null, readonly_cookie: { auth_token: string; state: string }) {
 		this.cookies = cookies;
 		this.readonly_cookie = readonly_cookie;
 		this.client = getRequestClient(readonly_cookie);
@@ -18,27 +21,27 @@ export class Auth0Provider {
 		return !!this.readonly_cookie.auth_token;
 	}
 
-	async login(returnTo) {
+	async login(returnTo: string) {
 		const response = await this.client.auth.Login();
-		this.cookies.set('state', response.state, { path: '/' });
-		if (typeof window !== 'undefined' && window.sessionStorage) {
-			// Assuming 'browser' refers to a browser environment
-			window.sessionStorage.setItem(response.state, returnTo);
-		}
+		if (this.cookies != null) this.cookies.set('state', response.state, { path: '/' });
 		return response.auth_code_url;
 	}
 
 	async logout() {
 		const response = await this.client.auth.Logout();
-		this.cookies.remove('auth-token');
-		this.cookies.remove('state');
+		if (this.cookies != null) {
+			this.cookies.delete('auth-token', { path: '/' });
+			this.cookies.delete('state', { path: '/' });
+		}
+
 		return response.redirect_url;
 	}
 
-	async validate(state, authCode) {
-		if (state !== this.cookies.get('state')) throw new Error('Invalid state');
+	async validate(state: string, authCode: string) {
+		if (this.cookies != null && state !== this.cookies.get('state'))
+			throw new Error('Invalid state');
 		const response = await this.client.auth.Callback({ code: authCode });
-		this.cookies.set('auth-token', response.token, { path: '/' });
+		if (this.cookies != null) this.cookies.set('auth-token', response.token, { path: '/' });
 		if (typeof window !== 'undefined' && window.sessionStorage) {
 			const returnURL = window.sessionStorage.getItem(state) ?? '/';
 			window.sessionStorage.removeItem(state);
@@ -47,36 +50,3 @@ export class Auth0Provider {
 		return '/';
 	}
 }
-// export const Auth0Provider = (cookies) => {
-//   client: getRequestClient(cookies),
-//     isAuthenticated: () => !!cookies.get('auth-token'),
-
-//       async login(returnTo: RedirectURL): Promise < RedirectURL > {
-//         const response = await this.client.auth.Login();
-//         cookies.set('state', response.state);
-//         if(browser) sessionStorage.setItem(response.state, returnTo);
-//         return response.auth_code_url;
-//       },
-
-//         async logout(): Promise < RedirectURL > {
-//           const response = await this.client.auth.Logout();
-
-//           cookies.remove('auth-token');
-//           cookies.remove('state');
-
-//           return response.redirect_url;
-//         },
-
-//           async validate(state: string, authCode: string,): Promise < RedirectURL > {
-//             if(state != cookies.get('state')) throw new Error('Invalid state');
-
-//   const response = await this.client.auth.Callback({ code: authCode });
-//   cookies.set('auth-token', response.token);
-//   if (browser) {
-//     const returnURL = sessionStorage.getItem(state) ?? '/';
-//     sessionStorage.removeItem(state);
-//     return returnURL;
-//   }
-//   return '';
-// }
-// };

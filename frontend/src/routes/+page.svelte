@@ -1,18 +1,15 @@
 <script lang="ts">
 	import { createMutation } from '@tanstack/svelte-query';
 	import type { CreateMutationResult } from '@tanstack/svelte-query';
-	import type { PageData } from '$lib/types';
-	import { browser } from '$app/environment';
+	import type { PageData } from './$types';
 	import Client, { yume, Local } from '../client';
 	import LoginStatus from '../components/LoginStatus.svelte';
 	import { onMount } from 'svelte';
 
 	export let data: PageData;
-	let loaded = false;
 	let encoreClient: Client | null = null;
 	let loggedIn = false;
-	let mutation: null | CreateMutationResult<yume.Document, Error, yume.NewDocumentParams, unknown> =
-		null;
+	let mutation: null | CreateMutationResult<yume.Document, Error, yume.NewDocumentParams, unknown>;
 	let userid: string = '';
 	let content: string = '';
 	let name: string = '';
@@ -52,7 +49,7 @@
 	}
 </script>
 
-{#if mutation !== null && !mutation.loading}
+{#if mutation !== null}
 	<h1>Welcome to SvelteKit</h1>
 	<p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
 	<input bind:value={userid} placeholder="user id" />

@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import type { Cookies } from 'svelte';
+import type { Cookies } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ cookies }: { cookies: Cookies }) => {
 	return {
