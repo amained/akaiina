@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 
+	"encore.app/yume"
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
@@ -86,6 +87,19 @@ func (s *Service) Callback(
 			Code:    errs.Internal,
 			Message: err.Error(),
 		}
+	}
+
+	// check if user exists, if not we new user
+	out, err := yume.CheckUser(ctx, token.Extra("id_token").(string))
+	if !out.Exists {
+		if err != nil {
+			rlog.Error("we dumb", "sql error", err)
+			return nil, &errs.Error{
+				Code:    errs.Internal,
+				Message: "failed to check user",
+			}
+		}
+		yume.NewUser(ctx, &yume.NewUserParams{ID: profile["sub"].(string), USERNAME: profile["name"].(string)})
 	}
 
 	return &CallbackResponse{

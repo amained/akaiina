@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 
+	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/config"
 	"encore.dev/rlog"
@@ -22,37 +23,43 @@ var yumeconf = config.Load[*YumeConfig]()
 // User /yume/user
 // user management, TODO: connect to auth0 or something
 type User struct {
-	ID       uuid.UUID `encore:"sensitive"` // will return 400 if not valid uuid
-	UID      string    `encore:"sensitive"` // user id from auth0, currently not used
-	USERNAME string    `encore:"sensitive"` // username
+	ID       string `encore:"sensitive"` // id from auth0
+	USERNAME string `encore:"sensitive"` // username
 }
 
 type NewUserParams struct {
+	ID       string `encore:"sensitive"`
 	USERNAME string `encore:"sensitive"`
 }
 
 //encore:api private path=/yume/user/new
 func NewUser(ctx context.Context, p *NewUserParams) (*User, error) {
-	id, err := uuid.NewV4()
+	res, err := db.Exec(ctx, `INSERT INTO yuser (id, username) VALUES ($1, $2)`, p.ID, p.USERNAME)
 	if err != nil {
-		rlog.Error("uuid generation failed", "err", err)
+		rlog.Error("sql bug", "err", err)
 		return nil, err
 	}
-	db.Exec(ctx, `INSERT INTO yuser (id, username) VALUES ($1, $2)`, id, p.USERNAME)
-	return &User{ID: id, USERNAME: p.USERNAME}, nil
+	rlog.Debug("res", "res", res)
+	return &User{ID: p.ID, USERNAME: p.USERNAME}, nil
 }
 
-func checkUser(ctx context.Context, id string) error {
+// oh god what why who asked for this
+type CheckUserResult struct {
+	Exists bool `encore:"sensitive"`
+}
+
+//encore:api private path=/yume/user/check/:id
+func CheckUser(ctx context.Context, id string) (*CheckUserResult, error) {
 	// check if exist
 	err := db.QueryRow(ctx, `SELECT (id) FROM yuser WHERE id = $1`, id).Scan(&id)
 	if err != nil {
 		if errors.Is(err, sqldb.ErrNoRows) {
-			return errors.New("user not found")
+			return &CheckUserResult{false}, nil
 		}
 		rlog.Error("sql bug", "err", err)
-		return err
+		return &CheckUserResult{false}, err
 	}
-	return nil
+	return &CheckUserResult{true}, nil
 }
 
 // Notes/Docs /yume/documents
@@ -90,7 +97,12 @@ func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 		rlog.Error("uuid generation failed", "err", err)
 		return nil, err
 	}
-	if checkUser(ctx, p.OWNER) != nil {
+	authid, isauth := auth.UserID()
+	if !isauth {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "user not authenticated"}
+	}
+	x, _ := CheckUser(ctx, string(authid))
+	if x.Exists == false {
 		if yumeconf.LogPotentialBug {
 			rlog.Error("user not found", "id", p.OWNER)
 		}
@@ -130,7 +142,8 @@ func NewUserNamespace(ctx context.Context, p *NewUserNamespaceParams) (*UserName
 	if err != nil {
 		return nil, err
 	}
-	if checkUser(ctx, p.OWNER.String()) != nil {
+	x, _ := CheckUser(ctx, p.OWNER.String())
+	if !x.Exists {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "failed to find user with id"}
 	}
 	db.Exec(ctx, `INSERT INTO namespace (id, name, owner) VALUES ($1, $2, $3)`, id, p.NAME, p.OWNER.String())
