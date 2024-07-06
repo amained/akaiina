@@ -30,8 +30,14 @@ export function PreviewEnv(pr: number | string): BaseURL {
  * Client is an API client for the akaiina-2fpi Encore application. 
  */
 export default class Client {
+    public readonly auth: auth.ServiceClient
     public readonly yume: yume.ServiceClient
 
+
+    /**
+     * @deprecated This constructor is deprecated, and you should move to using BaseURL with an Options object
+     */
+    constructor(target: string, token?: string)
 
     /**
      * Creates a Client for calling the public and authenticated APIs of your Encore application.
@@ -39,8 +45,20 @@ export default class Client {
      * @param target  The target which the client should be configured to use. See Local and Environment for options.
      * @param options Options for the client
      */
-    constructor(target: BaseURL, options?: ClientOptions) {
+    constructor(target: BaseURL, options?: ClientOptions)
+    constructor(target: string | BaseURL = "prod", options?: string | ClientOptions) {
+
+        // Convert the old constructor parameters to a BaseURL object and a ClientOptions object
+        if (!target.startsWith("http://") && !target.startsWith("https://")) {
+            target = Environment(target)
+        }
+
+        if (typeof options === "string") {
+            options = { auth: options }
+        }
+
         const base = new BaseClient(target, options ?? {})
+        this.auth = new auth.ServiceClient(base)
         this.yume = new yume.ServiceClient(base)
     }
 }
@@ -58,6 +76,75 @@ export interface ClientOptions {
 
     /** Default RequestInit to be used for the client */
     requestInit?: Omit<RequestInit, "headers"> & { headers?: Record<string, string> }
+
+    /**
+     * Allows you to set the auth token to be used for each request
+     * either by passing in a static token string or by passing in a function
+     * which returns the auth token.
+     *
+     * These tokens will be sent as bearer tokens in the Authorization header.
+     */
+    auth?: string | AuthDataGenerator
+}
+
+export namespace auth {
+    export interface CallbackRequest {
+        code: string
+    }
+
+    export interface CallbackResponse {
+        token: string
+    }
+
+    export interface LoginResponse {
+        state: string
+        "auth_code_url": string
+    }
+
+    export interface LogoutResponse {
+        "redirect_url": string
+    }
+
+    export interface ProfileData {
+        email: string
+        picture: string
+    }
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+        }
+
+        public async Callback(params: CallbackRequest): Promise<CallbackResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callAPI("POST", `/auth/callback`, JSON.stringify(params))
+            return await resp.json() as CallbackResponse
+        }
+
+        /**
+         * Endpoints annotated with `auth` are public and requires authentication
+         * Learn more: encore.dev/docs/primitives/services-and-apis#access-controls
+         */
+        public async GetProfile(): Promise<ProfileData> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callAPI("GET", `/profile`)
+            return await resp.json() as ProfileData
+        }
+
+        public async Login(): Promise<LoginResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callAPI("POST", `/auth/login`)
+            return await resp.json() as LoginResponse
+        }
+
+        public async Logout(): Promise<LogoutResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callAPI("GET", `/auth/logout`)
+            return await resp.json() as LogoutResponse
+        }
+    }
 }
 
 export namespace yume {
@@ -171,6 +258,11 @@ type CallParameters = Omit<RequestInit, "method" | "body" | "headers"> & {
     query?: Record<string, string | string[]>
 }
 
+// AuthDataGenerator is a function that returns a new instance of the authentication data required by this API
+export type AuthDataGenerator = () =>
+  | string
+  | Promise<string | undefined>
+  | undefined;
 
 // A fetcher is the prototype for the inbuilt Fetch function
 export type Fetcher = typeof fetch;
@@ -182,6 +274,7 @@ class BaseClient {
     readonly fetcher: Fetcher
     readonly headers: Record<string, string>
     readonly requestInit: Omit<RequestInit, "headers"> & { headers?: Record<string, string> }
+    readonly authGenerator?: AuthDataGenerator
 
     constructor(baseURL: string, options: ClientOptions) {
         this.baseURL = baseURL
@@ -203,6 +296,17 @@ class BaseClient {
         } else {
             this.fetcher = boundFetch
         }
+
+        // Setup an authentication data generator using the auth data token option
+        if (options.auth !== undefined) {
+            const auth = options.auth
+            if (typeof auth === "function") {
+                this.authGenerator = auth
+            } else {
+                this.authGenerator = () => auth
+            }
+        }
+
     }
 
     // callAPI is used by each generated API method to actually make the request
@@ -217,6 +321,22 @@ class BaseClient {
 
         // Merge our headers with any predefined headers
         init.headers = {...this.headers, ...init.headers, ...headers}
+
+        // If authorization data generator is present, call it and add the returned data to the request
+        let authData: string | undefined
+        if (this.authGenerator) {
+            const mayBePromise = this.authGenerator()
+            if (mayBePromise instanceof Promise) {
+                authData = await mayBePromise
+            } else {
+                authData = mayBePromise
+            }
+        }
+
+        // If we now have authentication data, add it to the request
+        if (authData) {
+            init.headers["Authorization"] = "Bearer " + authData
+        }
 
         // Make the actual request
         const queryString = query ? '?' + encodeQuery(query) : ''
