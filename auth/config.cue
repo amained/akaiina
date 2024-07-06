@@ -6,3 +6,7 @@ if #Meta.Environment.Type == "development" && #Meta.Environment.Cloud == "local"
 	CallbackURL: "http://localhost:5173/callback"
 	LogoutURL: "http://localhost:5173/"
 }
+if !(#Meta.Environment.Type == "development" && #Meta.Environment.Cloud == "local"){
+    CallbackURL: "https://please-set-the-url.com/callback"
+    LogoutURL: "https://please-set-the-url.com/"
+}

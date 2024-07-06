@@ -102,7 +102,7 @@ func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "user not authenticated"}
 	}
 	x, _ := CheckUser(ctx, string(authid))
-	if x.Exists == false {
+	if !x.Exists {
 		if yumeconf.LogPotentialBug {
 			rlog.Error("user not found", "id", p.OWNER)
 		}
@@ -125,28 +125,32 @@ func getDocument(ctx context.Context, id string) error {
 // currently only in atari serverless pod [dimension: 768, metric: cosine, spec: aws us-east-1]
 type UserNamespace struct {
 	ID    uuid.UUID
-	NAME  string    `encore:"sensitive"`
-	OWNER uuid.UUID `encore:"sensitive"`
+	NAME  string `encore:"sensitive"`
+	OWNER string `encore:"sensitive"`
 }
 
 type NewUserNamespaceParams struct {
-	NAME  string    `encore:"sensitive"`
-	OWNER uuid.UUID `encore:"sensitive"`
+	NAME  string `encore:"sensitive"`
+	OWNER string `encore:"sensitive"`
 }
 
 // TODO: generate embedding and manage the pineconedb from typescript backend
 
-//encore:api public path=/yume/userns/new
+//encore:api auth path=/yume/userns/new
 func NewUserNamespace(ctx context.Context, p *NewUserNamespaceParams) (*UserNamespace, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, err
 	}
-	x, _ := CheckUser(ctx, p.OWNER.String())
+	userid, isauth := auth.UserID()
+	if !isauth {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "user not authenticated"}
+	}
+	x, _ := CheckUser(ctx, string(userid))
 	if !x.Exists {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "failed to find user with id"}
 	}
-	db.Exec(ctx, `INSERT INTO namespace (id, name, owner) VALUES ($1, $2, $3)`, id, p.NAME, p.OWNER.String())
+	db.Exec(ctx, `INSERT INTO namespace (id, name, owner) VALUES ($1, $2, $3)`, id, p.NAME, p.OWNER)
 	return &UserNamespace{ID: id, NAME: p.NAME, OWNER: p.OWNER}, nil
 }
 
