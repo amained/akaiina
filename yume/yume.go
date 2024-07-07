@@ -32,6 +32,9 @@ type NewUserParams struct {
 	USERNAME string `encore:"sensitive"`
 }
 
+// This is supposed to be called from the auth service only!!
+// Basically add user to the database
+//
 //encore:api private path=/yume/user/new
 func NewUser(ctx context.Context, p *NewUserParams) (*User, error) {
 	res, err := db.Exec(ctx, `INSERT INTO yuser (id, username) VALUES ($1, $2)`, p.ID, p.USERNAME)
@@ -43,11 +46,14 @@ func NewUser(ctx context.Context, p *NewUserParams) (*User, error) {
 	return &User{ID: p.ID, USERNAME: p.USERNAME}, nil
 }
 
-// oh god what why who asked for this
+// Oh god what why who asked for this
 type CheckUserResult struct {
 	Exists bool `encore:"sensitive"`
 }
 
+// Check if user exists
+// should be called and exposed only in our services, not from the frontend
+//
 //encore:api private path=/yume/user/check/:id
 func CheckUser(ctx context.Context, id string) (*CheckUserResult, error) {
 	// check if exist
@@ -84,6 +90,13 @@ func IsBase64(s string) bool {
 	return err == nil
 }
 
+// Adds a new document to the database
+// Errors:
+// - InvalidArgument: content is not base64 encoded
+// - Unauthenticated: user not authenticated (should be impossible?)
+// - NotFound: user not found
+// - Internal: uuid generation failed
+//
 //encore:api auth path=/yume/documents/new
 func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 	if !IsBase64(p.CONTENT_BASE64) {
@@ -134,8 +147,13 @@ type NewUserNamespaceParams struct {
 	OWNER string `encore:"sensitive"`
 }
 
-// TODO: generate embedding and manage the pineconedb from typescript backend
-
+// Adds a new namespace to the database
+// I think we can have multiple namespace with same name but different id?
+// Errors:
+// - Unauthenticated: user not authenticated (should be impossible?)
+// - NotFound: user not found
+// - Internal: uuid generation failed
+//
 //encore:api auth path=/yume/userns/new
 func NewUserNamespace(ctx context.Context, p *NewUserNamespaceParams) (*UserNamespace, error) {
 	id, err := uuid.NewV4()
@@ -171,9 +189,16 @@ func getUserNS(ctx context.Context, id string) error {
 	return nil
 }
 
+// Adds a document to a namespace
+// Errors:
+// - NotFound: document not found
+// - Internal: sql error
+// - Unauthenticated: user not authenticated (should be impossible?)
+// - InvalidArgument: namespace id not found
+//
 //encore:api public path=/yume/userns/insert/:id
 func InsertToUserNamespace(ctx context.Context, id string, p *QueryUserNamespaceParams) error {
-	err := getUserNS(ctx, id)
+	err := getUserNS(ctx, id) // TODO: also check if user has access to this namespace
 	if err != nil {
 		if err.(*errs.Error).Code == errs.NotFound {
 			rlog.Error("invalid namespace id, frontend bug?", "id", id)
