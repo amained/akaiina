@@ -5,17 +5,13 @@ import (
 	"encoding/base64"
 	"errors"
 
+	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/config"
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 	"encore.dev/types/uuid"
-	"github.com/pinecone-io/go-pinecone/pinecone"
 )
-
-var secrets struct {
-	pineconeKey string
-}
 
 type YumeConfig struct {
 	Prod            bool
@@ -24,58 +20,46 @@ type YumeConfig struct {
 
 var yumeconf = config.Load[*YumeConfig]()
 
-//encore:service
-type Service struct {
-	pineconeClient  *pinecone.Client
-	indexConnection *pinecone.IndexConnection
-}
-
-func initService() (*Service, error) {
-	pc, err := pinecone.NewClient(pinecone.NewClientParams{ApiKey: secrets.pineconeKey})
-	if err != nil {
-		return nil, err
-	}
-	indx, err := pc.Index("https://multilingual-e5-large-qnilgk5.svc.aped-4627-b74a.pinecone.io")
-	if err != nil {
-		return nil, err
-	}
-	return &Service{pineconeClient: pc, indexConnection: indx}, nil
-}
-
 // User /yume/user
 // user management, TODO: connect to auth0 or something
 type User struct {
-	ID       uuid.UUID `encore:"sensitive"` // will return 400 if not valid uuid
-	UID      string    `encore:"sensitive"` // user id from auth0, currently not used
-	USERNAME string    `encore:"sensitive"` // username
+	ID       string `encore:"sensitive"` // id from auth0
+	USERNAME string `encore:"sensitive"` // username
 }
 
 type NewUserParams struct {
+	ID       string `encore:"sensitive"`
 	USERNAME string `encore:"sensitive"`
 }
 
 //encore:api private path=/yume/user/new
 func NewUser(ctx context.Context, p *NewUserParams) (*User, error) {
-	id, err := uuid.NewV4()
+	res, err := db.Exec(ctx, `INSERT INTO yuser (id, username) VALUES ($1, $2)`, p.ID, p.USERNAME)
 	if err != nil {
-		rlog.Error("uuid generation failed", "err", err)
+		rlog.Error("sql bug", "err", err)
 		return nil, err
 	}
-	db.Exec(ctx, `INSERT INTO yuser (id, username) VALUES ($1, $2)`, id, p.USERNAME)
-	return &User{ID: id, USERNAME: p.USERNAME}, nil
+	rlog.Debug("res", "res", res)
+	return &User{ID: p.ID, USERNAME: p.USERNAME}, nil
 }
 
-func checkUser(ctx context.Context, id string) error {
+// oh god what why who asked for this
+type CheckUserResult struct {
+	Exists bool `encore:"sensitive"`
+}
+
+//encore:api private path=/yume/user/check/:id
+func CheckUser(ctx context.Context, id string) (*CheckUserResult, error) {
 	// check if exist
 	err := db.QueryRow(ctx, `SELECT (id) FROM yuser WHERE id = $1`, id).Scan(&id)
 	if err != nil {
 		if errors.Is(err, sqldb.ErrNoRows) {
-			return errors.New("user not found")
+			return &CheckUserResult{false}, nil
 		}
 		rlog.Error("sql bug", "err", err)
-		return err
+		return &CheckUserResult{false}, err
 	}
-	return nil
+	return &CheckUserResult{true}, nil
 }
 
 // Notes/Docs /yume/documents
@@ -100,7 +84,7 @@ func IsBase64(s string) bool {
 	return err == nil
 }
 
-//encore:api public path=/yume/documents/new
+//encore:api auth path=/yume/documents/new
 func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 	if !IsBase64(p.CONTENT_BASE64) {
 		if yumeconf.LogPotentialBug {
@@ -112,6 +96,17 @@ func NewDocument(ctx context.Context, p *NewDocumentParams) (*Document, error) {
 	if err != nil {
 		rlog.Error("uuid generation failed", "err", err)
 		return nil, err
+	}
+	authid, isauth := auth.UserID()
+	if !isauth {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "user not authenticated"}
+	}
+	x, _ := CheckUser(ctx, string(authid))
+	if !x.Exists {
+		if yumeconf.LogPotentialBug {
+			rlog.Error("user not found", "id", p.OWNER)
+		}
+		return nil, &errs.Error{Code: errs.NotFound, Message: "failed to find user with id"}
 	}
 	db.Exec(ctx, `INSERT INTO document (id, namespace_id, name, b64_content) VALUES ($1, $2, $3, $4)`, id, p.OWNER, p.NAME, p.CONTENT_BASE64)
 	return &Document{ID: id, OWNER: p.OWNER, NAME: p.NAME}, nil
@@ -130,27 +125,32 @@ func getDocument(ctx context.Context, id string) error {
 // currently only in atari serverless pod [dimension: 768, metric: cosine, spec: aws us-east-1]
 type UserNamespace struct {
 	ID    uuid.UUID
-	NAME  string    `encore:"sensitive"`
-	OWNER uuid.UUID `encore:"sensitive"`
+	NAME  string `encore:"sensitive"`
+	OWNER string `encore:"sensitive"`
 }
 
 type NewUserNamespaceParams struct {
-	NAME  string    `encore:"sensitive"`
-	OWNER uuid.UUID `encore:"sensitive"`
+	NAME  string `encore:"sensitive"`
+	OWNER string `encore:"sensitive"`
 }
 
 // TODO: generate embedding and manage the pineconedb from typescript backend
 
-//encore:api public path=/yume/userns/new
+//encore:api auth path=/yume/userns/new
 func NewUserNamespace(ctx context.Context, p *NewUserNamespaceParams) (*UserNamespace, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, err
 	}
-	if checkUser(ctx, p.OWNER.String()) != nil {
+	userid, isauth := auth.UserID()
+	if !isauth {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "user not authenticated"}
+	}
+	x, _ := CheckUser(ctx, string(userid))
+	if !x.Exists {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "failed to find user with id"}
 	}
-	db.Exec(ctx, `INSERT INTO namespace (id, name, owner) VALUES ($1, $2, $3)`, id, p.NAME, p.OWNER.String())
+	db.Exec(ctx, `INSERT INTO namespace (id, name, owner) VALUES ($1, $2, $3)`, id, p.NAME, p.OWNER)
 	return &UserNamespace{ID: id, NAME: p.NAME, OWNER: p.OWNER}, nil
 }
 
