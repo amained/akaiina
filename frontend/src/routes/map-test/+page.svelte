@@ -1,0 +1,13 @@
+<script>
+    import { input } from '$lib/input.ts';
+    import Idea from '$lib/idea.svelte';
+</script>
+
+<h1 style="text-align: center">Mind Map Test</h1>
+
+<Idea
+    title={input[0].title}
+    desc={input[0].desc}
+    children={input[0].children}
+    relavance={input[0].relavance}
+/>
